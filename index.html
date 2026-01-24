@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jojo Store - Panel & Apps</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <nav>
+        <div class="container nav-content">
+            <a href="index.html" class="logo">JOJO <span>STORE</span></a>
+            <div class="nav-actions">
+                <a href="index.html" class="active">🛍 Produk</a>
+                <a href="#" onclick="openCart()">🛒 Cart (<span id="cartCount">0</span>)</a>
+                <a href="admin.html">⚙️ Admin</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="hero-banner">
+            <h1>Premium Digital Services</h1>
+            <p>Penyedia Pterodactyl Panel Murah & Aplikasi Premium Original.</p>
+        </div>
+
+        <div class="grid" id="productGrid">
+            <p style="color: #666; text-align:center; width:100%;">Menghubungkan ke Server...</p>
+        </div>
+    </div>
+
+    <div id="cartModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeCart()">&times;</span>
+            <h2 style="margin-bottom: 20px;">Keranjang Pesanan</h2>
+            <div id="cartItems"></div>
+            <div style="margin-top: 20px; text-align: right; font-size: 1.2rem; border-top: 1px solid #333; padding-top: 15px;" id="cartTotal">
+                Total: Rp 0
+            </div>
+            <button onclick="checkoutWA()" class="btn" style="width: 100%; margin-top: 20px;">Checkout via WhatsApp</button>
+        </div>
+    </div>
+
+    <script>
+        // --- KONFIGURASI JSONBIN ---
+        const BIN_ID = "6974d7fbd0ea881f408225a6"; 
+        const X_MASTER_KEY = "$2a$10$bzkU1GyyqKF.i2CA0DCMjeVswtmX1HGeqnDEfsdg/nU2b6d17CtEW";
+        const WA_ADMIN = "6281313601538";
+
+        let allProducts = []; 
+        let cart = [];
+
+        // Fungsi Ambil Data dari Cloud
+        async function loadProducts() {
+            const grid = document.getElementById('productGrid');
+            try {
+                const response = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+                    headers: { 'X-Master-Key': X_MASTER_KEY }
+                });
+                const data = await response.json();
+                allProducts = data.record; 
+                renderGrid(allProducts);
+            } catch (error) {
+                console.error(error);
+                grid.innerHTML = `<p style="color:red; text-align:center;">Gagal memuat data. Cek koneksi atau API Key.</p>`;
+            }
+        }
+
+        function renderGrid(products) {
+            const grid = document.getElementById('productGrid');
+            if (products.length === 0) {
+                grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 50px; border: 1px dashed #333;">
+                    <h3>Belum ada produk</h3>
+                </div>`;
+                return;
+            }
+
+            grid.innerHTML = '';
+            products.forEach(p => {
+                let specsHTML = '';
+                if (p.type === 'Pterodactyl' && p.specs) {
+                    specsHTML = `<div class="specs">${p.specs.split(',').map(s => `<span class="spec-tag">⚡ ${s.trim()}</span>`).join('')}</div>`;
+                } else if (p.type === 'App') {
+                    specsHTML = `<div class="specs"><span class="spec-tag">📦 Premium Original</span></div>`;
+                }
+
+                const isOutOfStock = p.stock <= 0;
+                const btnState = isOutOfStock ? 'disabled style="opacity:0.5"' : `onclick="addToCart(${p.id})"`;
+                const btnText = isOutOfStock ? 'HABIS' : 'BELI SEKARANG';
+
+                const card = `
+                    <div class="card">
+                        <span class="card-type">${p.type}</span>
+                        <img src="${p.image}" class="card-img" alt="${p.name}">
+                        <h3 style="margin-bottom:10px; font-size:1.1rem;">${p.name}</h3>
+                        ${specsHTML}
+                        <div class="price">Rp ${parseInt(p.price).toLocaleString('id-ID')} <span>/ ${p.type === 'Pterodactyl' ? 'bulan' : 'akun'}</span></div>
+                        <button class="btn" style="width:100%" ${btnState}>${btnText}</button>
+                    </div>
+                `;
+                grid.innerHTML += card;
+            });
+        }
+
+        function addToCart(id) {
+            const product = allProducts.find(p => p.id === id);
+            const inCart = cart.find(c => c.id === id);
+            const cartQty = inCart ? inCart.qty : 0;
+            
+            if (cartQty >= product.stock) {
+                alert("Maaf, stok/slot tidak cukup!");
+                return;
+            }
+
+            if (inCart) inCart.qty++;
+            else cart.push({ ...product, qty: 1 });
+            updateCartCount();
+        }
+
+        function updateCartCount() {
+            document.getElementById('cartCount').innerText = cart.reduce((a, b) => a + b.qty, 0);
+        }
+
+        function openCart() {
+            document.getElementById('cartModal').style.display = 'flex';
+            renderCartItems();
+        }
+
+        function closeCart() {
+            document.getElementById('cartModal').style.display = 'none';
+        }
+
+        function renderCartItems() {
+            const container = document.getElementById('cartItems');
+            const totalEl = document.getElementById('cartTotal');
+            container.innerHTML = '';
+            
+            if (cart.length === 0) {
+                container.innerHTML = '<p style="text-align:center; color:#666; margin:20px 0;">Keranjang kosong.</p>';
+                totalEl.innerText = 'Total: Rp 0';
+                return;
+            }
+
+            let total = 0;
+            cart.forEach((item, idx) => {
+                const sub = item.price * item.qty;
+                total += sub;
+                container.innerHTML += `
+                    <div class="cart-item">
+                        <div>
+                            <div style="font-weight:bold; color:var(--primary)">${item.name}</div>
+                            <small style="color:#aaa">${item.qty} x Rp ${item.price.toLocaleString('id-ID')}</small>
+                        </div>
+                        <div style="text-align:right">
+                            <div>Rp ${sub.toLocaleString('id-ID')}</div>
+                            <small onclick="removeItem(${idx})" style="color:var(--danger); cursor:pointer;">Hapus</small>
+                        </div>
+                    </div>
+                `;
+            });
+            totalEl.innerText = 'Total: Rp ' + total.toLocaleString('id-ID');
+        }
+
+        function removeItem(index) {
+            cart.splice(index, 1);
+            updateCartCount();
+            renderCartItems();
+        }
+
+        function checkoutWA() {
+            if (cart.length === 0) return;
+            let msg = "Halo Admin Jojo Store, saya mau order:%0A%0A";
+            let total = 0;
+            cart.forEach(c => {
+                let sub = c.price * c.qty;
+                total += sub;
+                msg += `- ${c.name} (${c.qty}x)%0A`;
+            });
+            msg += `%0A*Total: Rp ${total.toLocaleString('id-ID')}*%0A%0AMohon diproses min, terima kasih!`;
+            window.open(`https://wa.me/${WA_ADMIN}?text=${msg}`, '_blank');
+        }
+
+        window.onload = loadProducts;
+        window.onclick = function(event) {
+            if (event.target == document.getElementById('cartModal')) closeCart();
+        }
+    </script>
+</body>
+</html>
